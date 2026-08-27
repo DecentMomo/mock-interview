@@ -1,0 +1,460 @@
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Code, Users, Building, Clock, Star, Play, ArrowRight, CircleCheck, Turtle } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import Modal from "./Modal"
+import { toast } from "@/hooks/use-toast";
+
+const InterviewTopics = () => {
+  const navigate = useNavigate();
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [formData, setFormData] = useState({
+    course: "",
+    difficulty: [],
+    ai: false
+  });
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+
+    setFormData((prev) => {
+      if (type === 'checkbox') {
+        // For checkbox, manage array of difficulties
+        if (name === 'ai') {
+          return {
+            ...prev,
+            ai: checked,
+          };
+        }
+        else {
+          let newDifficulties;
+          if (checked) {
+            newDifficulties = [...(prev.difficulty || []), value];
+          } else {
+            newDifficulties = (prev.difficulty || []).filter((level) => level !== value);
+          }
+          return {
+            ...prev,
+            difficulty: newDifficulties,
+          };
+        }
+      } else {
+        // For dropdown/select or other inputs
+        return {
+          ...prev,
+          [name]: value,
+        };
+      }
+    });
+  };
+
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    // console.log("formdata", formData);
+
+    if (!Array.isArray(formData.difficulty) || formData.difficulty.length === 0) {
+      toast({
+        variant: "destructive",
+        description: "Please select at least one difficulty level."
+      });
+      return;
+    }
+
+    if (!selectedCategory || !selectedCategory.id) {
+      toast({
+        variant: "destructive",
+        description: "Please select a category."
+      });
+      return;
+    }
+
+    const token = localStorage.getItem("authToken");
+    if (!token) {
+      toast({
+        variant: "destructive",
+        description: "You must be logged in to perform this action."
+      });
+      return;
+    }
+
+    try {
+      let response;
+      let data1;
+
+      if (formData.ai == true) {
+        // console.log("question will come from gemini");
+        // console.log("form data in ai :", formData);
+        response = await fetch(`${import.meta.env.VITE_API_URL}/api/agent/ai-generate-questions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: formData.course,
+            difficulty: formData.difficulty,
+          }),
+        });
+
+        data1 = await response.json();
+        data1 = data1.questions;
+        // console.log("response from gemini api :", data1.questions);
+
+        if (!response.ok) {
+          toast({
+            variant: "destructive",
+            description: response.json.message || "An unknown error occurred.",
+          });
+          return;
+        }
+      }
+      else {
+        // console.log("question will come from db");
+        response = await fetch(`${import.meta.env.VITE_API_URL}/api/filter-questions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: formData.course,
+            category: selectedCategory.id,
+            difficulty: formData.difficulty,
+          }),
+        });
+
+        data1 = await response.json();
+        // console.log("response from db questions :", data1.questions);
+
+        if (!response.ok) {
+          toast({
+            variant: "destructive",
+            description: response.json.message || "An unknown error occurred.",
+          });
+          // console.log("response not ok");
+          return;
+        }
+      }
+      // try {
+      //   console.log("questions received :", data1.questions);  
+
+      // } catch {
+      //   data1 = {};
+      // }
+
+      navigate('/check-permissions', {
+        state: {
+          active: true,
+          url: `/interview/session?type=${selectedCategory.id}`,
+          interviewQuestions: data1.questions ?? data1,
+          interviewCategory: selectedCategory.id,
+          interviewCourse:   formData.course,
+        }
+      });
+
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        description: "Server error. Could not connect to the server.",
+      });
+    }
+  };
+
+
+  const categories = [
+    {
+      id: "Technical",
+      title: "Technical Interviews",
+      description: "Coding challenges, algorithms, data structures, and system design questions",
+      icon: Code,
+      difficulty: "Medium to Hard",
+      duration: "45-60 min",
+      level: ["Basic", "Medium", "Advanced"],
+      questions: 25,
+      color: "bg-blue-500",
+      popular: true
+    },
+    {
+      id: "HR",
+      title: "HR Interviews",
+      description: "Company culture fit, motivation, career goals, and general questions",
+      icon: Building,
+      difficulty: "Easy",
+      duration: "20-30 min",
+      level: ["casual"],
+      questions: 15,
+      color: "bg-purple-500",
+      popular: false
+    },
+    {
+      id: "Behavioral",
+      title: "Behavioral Interviews",
+      description: "Situational questions, teamwork, leadership, and soft skills assessment",
+      icon: Users,
+      difficulty: "Easy to Medium",
+      level: ["casual"],
+      duration: "30-45 min",
+      questions: 20,
+      color: "bg-green-500",
+      popular: true
+    },
+  ];
+
+  const quickStart = [
+    {
+      title: "Quick Technical",
+      description: "Short coding challenges",
+      duration: "20 min",
+      questions: 5
+    },
+    {
+      title: "Behavioral Focus",
+      description: "Common behavioral questions",
+      duration: "25 min",
+      questions: 5
+    },
+    {
+      title: "Mixed Practice",
+      description: "Random questions from all",
+      duration: "45 min",
+      questions: 10
+    },
+  ];
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="py-12">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Header */}
+          <div className="text-center mb-12">
+            <h1 className="text-3xl font-bold mb-4 text-gray-900">
+              Select Your Interview Type
+            </h1>
+            <p className="text-base text-gray-500 max-w-xl mx-auto">
+              Choose the interview format that best suits your goals. Each option is
+              designed to prepare you for success in specific professional
+              scenarios.
+            </p>
+          </div>
+
+          {/* Main Categories */}
+          <div className="mb-12">
+            <h2 className="text-xl font-semibold mb-6 text-gray-900">
+              Interview Categories
+            </h2>
+            <div className="grid gird-cols-1 md:grid-cols-3 sm:grid-cols-2 gap-4 md:gap-6">
+              {categories.map((category) => (
+                <Card
+                  key={category.id}
+                  className="p-1 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md"
+                >
+                  <CardHeader>
+                    <div className="flex items-center space-x-4">
+                      <div className="flex-1">
+                        <CardTitle className="text-lg font-semibold text-gray-900 flex items-center justify-between">
+                          {category.title}
+                        </CardTitle>
+                        <CardDescription className="text-sm text-gray-500">
+                          {category.description}
+                        </CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <div className="px-4 pb-4 sm:px-6 sm:pb-6">
+                    <button
+                      onClick={() => setSelectedCategory(category)}
+                      className="group text-primary hover:text-primary-hover font-semibold transition-colors duration-200 flex items-center space-x-1 text-sm"
+                    >
+                      <span>View Details</span>
+                      <svg
+                        className="w-4 h-4 opacity-0 group-hover:opacity-100 translate-x-0 group-hover:translate-x-1 transition-all duration-200"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+
+            {/* Modal for showing expanded details */}
+            <Modal isOpen={!!selectedCategory} onClose={() => setSelectedCategory(null)}>
+              {selectedCategory && (
+                <>
+                  <h3 className="text-xl font-semibold mb-4 flex items-center space-x-3 text-gray-900">
+                    <div
+                      className={`${selectedCategory.color} w-10 h-10 rounded-lg flex items-center justify-center`}
+                    >
+                      <selectedCategory.icon className="w-6 h-6 text-white" />
+                    </div>
+                    <span>{selectedCategory.title}</span>
+                    {selectedCategory.popular && (
+                      <Badge className="bg-yellow-400 text-yellow-900 flex items-center px-2 py-0.5 rounded text-xs">
+                        <Star className="w-4 h-4 mr-1" />
+                        Popular
+                      </Badge>
+                    )}
+                  </h3>
+                  <p className="mb-6 text-sm text-gray-500">
+                    {selectedCategory.description}
+                  </p>
+
+                  <form onSubmit={handleSubmit}>
+                    <div className="bg-white rounded-lg p-4 sm:p-6 shadow-sm space-y-6 text-sm text-gray-700">
+                      <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+                        <div>
+                          <label
+                            htmlFor="course"
+                            className="block uppercase tracking-wide text-xs font-semibold text-gray-500 mb-1"
+                          >
+                            Select Course
+                          </label>
+                          <select
+                            id="course"
+                            name="course"
+                            value={formData.course}
+                            onChange={handleChange}
+                            required
+                            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-800 text-sm"
+                          >
+                            <option value="" disabled>
+                              Select a course
+                            </option>
+                            <option value="Java">Java</option>
+                            <option value="Natworking">Networking</option>
+                            <option value="OS">OS</option>
+                            {/* <option value="System-design">System Design</option> */}
+                          </select>
+                        </div>
+                        {/* <div>
+                          <p className="uppercase tracking-wide text-xs font-semibold text-gray-500 mb-1">
+                            Duration
+                          </p>
+                          <p className="font-medium text-gray-900 text-sm">
+                            {selectedCategory.duration}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="uppercase tracking-wide text-xs font-semibold text-gray-500 mb-1">
+                            Questions
+                          </p>
+                          <p className="font-medium text-gray-900 text-sm">
+                            {selectedCategory.questions}+
+                          </p>
+                        </div> */}
+                        <div className="flex flex-wrap gap-2 sm:gap-4 text-sm text-gray-800">
+                          <label
+                            htmlFor="course"
+                            className="block uppercase tracking-wide text-xs font-semibold text-gray-500 mb-1"
+                          >
+                            AI INTERVIEW
+                            <br></br>
+                            <label
+                              key="ai"
+                              className="flex items-center space-x-2 bg-gray-100 px-3 py-1 rounded-full cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                name="ai"
+                                // value={level}
+                                // checked={formData.difficulty.includes(level)}
+                                onChange={handleChange}
+                                className="form-checkbox text-indigo-600"
+                              />
+                              <span className="capitalize">Agentic Ai</span>
+                            </label>
+                          </label>
+
+                        </div>
+                      </div>
+                      <div>
+                        <p className="uppercase tracking-wide text-xs font-semibold text-gray-500 mb-2">
+                          Difficulty
+                        </p>
+                        <div className="flex flex-wrap gap-2 sm:gap-4 text-sm text-gray-800">
+                          {selectedCategory.level.map((level) => (
+                            <label
+                              key={level}
+                              className="flex items-center space-x-2 bg-gray-100 px-3 py-1 rounded-full cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                name="difficulty"
+                                value={level}
+                                checked={formData.difficulty.includes(level)}
+                                onChange={handleChange}
+                                className="form-checkbox text-indigo-600"
+                              />
+                              <span className="capitalize">{level}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <Button
+                      type="submit"
+                      className="w-full bg-primary hover:bg-primary-hover transition-colors duration-200 flex items-center justify-center mt-4 text-sm font-medium"
+                    >
+                      Start {selectedCategory.title}
+                      <ArrowRight className="w-5 h-5 ml-2" />
+                    </Button>
+                  </form>
+                </>
+              )}
+            </Modal>
+          </div>
+
+          {/* Quick Start Section */}
+          <div className="mb-2">
+            <h2 className="text-xl font-semibold mb-6 text-gray-900">Quick Start</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
+              {quickStart.map((option, index) => (
+                <Card
+                  key={index}
+                  className="p-1 bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md"
+                >
+                  <CardHeader>
+                    <CardTitle className="text-base font-medium text-gray-900">
+                      {option.title}
+                    </CardTitle>
+                    <CardDescription className="text-sm text-gray-500">
+                      {option.description}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 text-xs text-gray-500 gap-2 sm:gap-0">
+                      <div className="flex items-center">
+                        <Clock className="w-4 h-4 mr-1" />
+                        {option.duration}
+                      </div>
+                      <Badge variant="outline" className="text-xs">
+                        {option.questions} questions
+                      </Badge>
+                    </div>
+                    <Link to="/interview/session">
+                      <Button className="w-full flex items-center justify-center group text-sm font-medium">
+                        <Play className="w-4 h-4 mr-2 block group-hover:hidden" />
+                        <CircleCheck className="w-4 h-4 mr-2 hidden group-hover:block text-green-500" />
+                        Start Now
+                      </Button>
+                    </Link>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  );
+};
+
+export default InterviewTopics;
